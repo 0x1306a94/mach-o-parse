@@ -27,7 +27,8 @@ static struct _cpu_type_names cpu_type_names[] = {
     {CPU_TYPE_I386, "i386"},
     {CPU_TYPE_X86_64, "x86_64"},
     {CPU_TYPE_ARM, "arm"},
-    {CPU_TYPE_ARM64, "arm64"}};
+    {CPU_TYPE_ARM64, "arm64"},
+};
 
 static const char *cpu_type_name(cpu_type_t cpu_type) {
 	static int cpu_type_names_size = sizeof(cpu_type_names) / sizeof(struct _cpu_type_names);
@@ -273,7 +274,7 @@ void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab,
 void dump_symbol_table_common_symbol_64(char *strtab, struct symtab_command *symtab, struct nlist_64 *list) {
 	NSString *symbolName = NSSTRING(strtab + list->n_un.n_strx);
 	printf("\t%s\n", symbolName.UTF8String);
-    return;
+	return;
 	printf("\t\t");
 	bool bPrivateSymbol = (list->n_type & N_PEXT) != 0;
 	if (bPrivateSymbol) {
