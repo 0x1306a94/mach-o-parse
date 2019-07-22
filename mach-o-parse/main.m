@@ -301,7 +301,7 @@ void dump_symbol_table_common_symbol_64(char *strtab, struct symtab_command *sym
 }
 
 void cxx_demangle(const char *mangleName, char **demangleName) {
-	char *cmd           = "c++filt ";
+	char *cmd           = "c++filt -n ";
 	size_t len          = strlen(mangleName) + strlen(cmd);
 	char *commandString = (char *)calloc(len, 1);
 	memcpy(commandString, cmd, strlen(cmd));
