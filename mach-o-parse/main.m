@@ -50,15 +50,27 @@ void dump_segments(FILE *obj_file);
 
 void dump_mach_header(FILE *obj_file, int offset, int is_64, int is_swap);
 
-void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncmds, struct symtab_command **symtab);
+void dump_segment_commands(FILE *obj_file, int offset, int is_64, int is_swap, uint32_t ncmds);
+
+void dump_section(FILE *obj_file, int is_swap, uint32_t offset, struct segment_command *segment);
+
+void dump_section_64(FILE *obj_file, int is_swap, uint64_t offset, struct segment_command_64 *segment);
 
 void dump_symbol_table_commands(FILE *obj_file, int offset, int is_swap, struct symtab_command *symtab);
 
 void dump_symbol_table_commands_64(FILE *obj_file, int offset, int is_swap, struct symtab_command *symtab);
 
-void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab, struct nlist_64 *list);
+void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab, struct nlist *list);
+
+void dump_symbol_table_common_symbol(char *strtab, struct symtab_command *symtab, struct nlist *list);
+
+void dump_symbol_table_debug_symbol_64(char *strtab, struct symtab_command *symtab, struct nlist_64 *list);
 
 void dump_symbol_table_common_symbol_64(char *strtab, struct symtab_command *symtab, struct nlist_64 *list);
+
+void dump_dwarf(FILE *obj_file, struct section *setion);
+
+void dump_dwarf_64(FILE *obj_file, struct section_64 *setion);
 
 void cxx_demangle(const char *mangleName, char **demangleName);
 
@@ -138,22 +150,10 @@ void dump_mach_header(FILE *obj_file, int offset, int is_64, int is_swap) {
 		free(header);
 		header = NULL;
 	}
-	struct symtab_command *symtab = NULL;
-	dump_segment_commands(obj_file, load_commands_offset, is_swap, ncmds, &symtab);
-	if (symtab) {
-		if (is_64) {
-			dump_symbol_table_commands_64(obj_file, symtab->symoff, is_swap, symtab);
-		} else {
-			dump_symbol_table_commands(obj_file, symtab->symoff, is_swap, symtab);
-		}
-	}
-	if (symtab != NULL) {
-		free(symtab);
-		symtab = NULL;
-	}
+	dump_segment_commands(obj_file, load_commands_offset, is_64, is_swap, ncmds);
 }
 
-void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncmds, struct symtab_command **symtab) {
+void dump_segment_commands(FILE *obj_file, int offset, int is_64, int is_swap, uint32_t ncmds) {
 	int actual_offset = offset;
 	for (int i = 0; i < ncmds; i++) {
 		struct load_command *cmd = load_bytes(obj_file, actual_offset, sizeof(struct load_command));
@@ -167,7 +167,14 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
 				if (is_swap) {
 					swap_segment_command_64(segment, NX_LittleEndian);
 				}
-				printf("segname: %s\n", segment->segname);
+				printf("LC_SEGMENT_64: %s\n", segment->segname);
+				uint64_t offset = 0;
+				if (segment->fileoff == 0 && segment->filesize == 0) {
+					offset = actual_offset + sizeof(struct segment_command_64);
+				} else {
+					offset = segment->fileoff;
+				}
+				dump_section_64(obj_file, is_swap, offset, segment);
 				free(segment);
 				break;
 			}
@@ -176,7 +183,14 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
 				if (is_swap) {
 					swap_segment_command(segment, NX_LittleEndian);
 				}
-				printf("segname: %s\n", segment->segname);
+				printf("LC_SEGMENT: %s\n", segment->segname);
+				uint32_t offset = 0;
+				if (segment->fileoff == 0 && segment->filesize == 0) {
+					offset = actual_offset + sizeof(struct segment_command);
+				} else {
+					offset = segment->fileoff;
+				}
+				dump_section(obj_file, is_swap, offset, segment);
 				free(segment);
 				break;
 			}
@@ -185,7 +199,7 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
 				if (is_swap) {
 					swap_uuid_command(uuidcmd, NX_LittleEndian);
 				}
-				printf("UUID: ");
+				printf("LC_UUID: ");
 				for (int i = 0; i < 16; i++) {
 					if (i > 0 && (i) % 4 == 0) {
 						printf("-");
@@ -197,16 +211,21 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
 				break;
 			}
 			case LC_SYMTAB: {
-				struct symtab_command *symtab_cmd = load_bytes(obj_file, actual_offset, sizeof(struct symtab_command));
+				struct symtab_command *symtab = load_bytes(obj_file, actual_offset, sizeof(struct symtab_command));
 				if (is_swap) {
-					swap_symtab_command(symtab_cmd, NX_LittleEndian);
+					swap_symtab_command(symtab, NX_LittleEndian);
 				}
-				*symtab = symtab_cmd;
-				printf("SYMTAB:\n");
-				printf("\tSymbol Table Offset: %d\n", symtab_cmd->symoff);
-				printf("\tNumber of Symbols: %d\n", symtab_cmd->nsyms);
-				printf("\tString Table Offset: %d\n", symtab_cmd->stroff);
-				printf("\tString Table Size: %d\n", symtab_cmd->strsize);
+				printf("LC_SYMTAB:\n");
+				printf("\tSymbol Table Offset: %d\n", symtab->symoff);
+				printf("\tNumber of Symbols: %d\n", symtab->nsyms);
+				printf("\tString Table Offset: %d\n", symtab->stroff);
+				printf("\tString Table Size: %d\n", symtab->strsize);
+
+				if (is_64) {
+					dump_symbol_table_commands_64(obj_file, symtab->symoff, is_swap, symtab);
+				} else {
+					dump_symbol_table_commands(obj_file, symtab->symoff, is_swap, symtab);
+				}
 				break;
 			}
 			default:
@@ -216,6 +235,57 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
 		actual_offset += cmd->cmdsize;
 		free(cmd);
 	}
+}
+
+void dump_section(FILE *obj_file, int is_swap, uint32_t offset, struct segment_command *segment) {
+	if (segment->nsects == 0) return;
+	void *buffer = calloc(1, segment->nsects * sizeof(struct section));
+	fseek(obj_file, offset, SEEK_SET);
+	fread(buffer, segment->nsects * sizeof(struct section), 1, obj_file);
+	struct section *list = (struct section *)buffer;
+	if (is_swap) {
+		swap_section(list, segment->nsects, NX_LittleEndian);
+	}
+
+	if (strcmp(segment->segname, "__DWARF") == 0) {
+		printf("\tSection Header (%s %s)\n", NSSTRING(list->sectname).UTF8String, NSSTRING(list->segname).UTF8String);
+		for (uint32_t num = 0; num < segment->nsects; num++) {
+			dump_dwarf(obj_file, list);
+			list++;
+		}
+	} else {
+		for (uint32_t num = 0; num < segment->nsects; num++) {
+			printf("\tSection Header (%s %s)\n", NSSTRING(list->sectname).UTF8String, NSSTRING(list->segname).UTF8String);
+			list++;
+		}
+	}
+	free(buffer);
+	buffer = NULL;
+}
+
+void dump_section_64(FILE *obj_file, int is_swap, uint64_t offset, struct segment_command_64 *segment) {
+	if (segment->nsects == 0) return;
+	void *buffer = calloc(1, segment->nsects * sizeof(struct section_64));
+	fseek(obj_file, offset, SEEK_SET);
+	fread(buffer, segment->nsects * sizeof(struct section_64), 1, obj_file);
+	struct section_64 *list = (struct section_64 *)buffer;
+	if (is_swap) {
+		swap_section_64(list, segment->nsects, NX_LittleEndian);
+	}
+	if (strcmp(segment->segname, "__DWARF") == 0) {
+        for (uint32_t num = 0; num < segment->nsects; num++) {
+            printf("\tSection64 Header (%s %s)\n", NSSTRING(list->sectname).UTF8String, NSSTRING(list->segname).UTF8String);
+			dump_dwarf_64(obj_file, list);
+			list++;
+		}
+	} else {
+		for (uint32_t num = 0; num < segment->nsects; num++) {
+			printf("\tSection64 Header (%s %s)\n", NSSTRING(list->sectname).UTF8String, NSSTRING(list->segname).UTF8String);
+			list++;
+		}
+	}
+	free(buffer);
+	buffer = NULL;
 }
 
 /*
@@ -239,6 +309,28 @@ void dump_segment_commands(FILE *obj_file, int offset, int is_swap, uint32_t ncm
  */
 
 void dump_symbol_table_commands(FILE *obj_file, int offset, int is_swap, struct symtab_command *symtab) {
+	void *buffer = calloc(1, symtab->nsyms);
+	fseek(obj_file, symtab->symoff, SEEK_SET);
+	fread(buffer, symtab->nsyms, 1, obj_file);
+	struct nlist *list = (struct nlist *)buffer;
+	if (is_swap) {
+		swap_nlist(list, symtab->nsyms, NX_LittleEndian);
+	}
+	printf("Symbols: \n");
+	char *strtab = (char *)load_bytes(obj_file, symtab->stroff, symtab->strsize);
+	for (uint32_t i = 0; i < symtab->nsyms / sizeof(struct nlist); i++) {
+		bool bDebuggingSymbol = (list->n_type & N_STAB) != 0;
+		if (bDebuggingSymbol) {
+			dump_symbol_table_debug_symbol(strtab, symtab, list);
+		} else {
+			dump_symbol_table_common_symbol(strtab, symtab, list);
+		}
+		list++;
+	}
+	free(strtab);
+	free(buffer);
+	strtab = NULL;
+	buffer = NULL;
 }
 
 void dump_symbol_table_commands_64(FILE *obj_file, int offset, int is_swap, struct symtab_command *symtab) {
@@ -249,12 +341,12 @@ void dump_symbol_table_commands_64(FILE *obj_file, int offset, int is_swap, stru
 	if (is_swap) {
 		swap_nlist_64(list, symtab->nsyms, NX_LittleEndian);
 	}
-	printf("symbols: \n");
+	printf("Symbols: \n");
 	char *strtab = (char *)load_bytes(obj_file, symtab->stroff, symtab->strsize);
 	for (uint32_t i = 0; i < symtab->nsyms / sizeof(struct nlist_64); i++) {
 		bool bDebuggingSymbol = (list->n_type & N_STAB) != 0;
 		if (bDebuggingSymbol) {
-			dump_symbol_table_debug_symbol(strtab, symtab, list);
+			dump_symbol_table_debug_symbol_64(strtab, symtab, list);
 		} else {
 			dump_symbol_table_common_symbol_64(strtab, symtab, list);
 		}
@@ -266,7 +358,17 @@ void dump_symbol_table_commands_64(FILE *obj_file, int offset, int is_swap, stru
 	buffer = NULL;
 }
 
-void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab, struct nlist_64 *list) {
+void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab, struct nlist *list) {
+	NSString *symbolName = NSSTRING(strtab + list->n_un.n_strx);
+	printf("\t%s\n", symbolName.UTF8String);
+}
+
+void dump_symbol_table_common_symbol(char *strtab, struct symtab_command *symtab, struct nlist *list) {
+	NSString *symbolName = NSSTRING(strtab + list->n_un.n_strx);
+	printf("\t%s\n", symbolName.UTF8String);
+}
+
+void dump_symbol_table_debug_symbol_64(char *strtab, struct symtab_command *symtab, struct nlist_64 *list) {
 	NSString *symbolName = NSSTRING(strtab + list->n_un.n_strx);
 	printf("\t%s\n", symbolName.UTF8String);
 }
@@ -274,30 +376,35 @@ void dump_symbol_table_debug_symbol(char *strtab, struct symtab_command *symtab,
 void dump_symbol_table_common_symbol_64(char *strtab, struct symtab_command *symtab, struct nlist_64 *list) {
 	NSString *symbolName = NSSTRING(strtab + list->n_un.n_strx);
 	printf("\t%s\n", symbolName.UTF8String);
-	return;
-	printf("\t\t");
-	bool bPrivateSymbol = (list->n_type & N_PEXT) != 0;
-	if (bPrivateSymbol) {
-		list->n_type &= ~N_PEXT;
-	}
-	bool bExternalSymbol = (list->n_type & N_EXT) != 0;
-	uint8_t type         = (list->n_type & N_TYPE);
+	//    printf("\t\t");
+	//    bool bPrivateSymbol = (list->n_type & N_PEXT) != 0;
+	//    if (bPrivateSymbol) {
+	//        list->n_type &= ~N_PEXT;
+	//    }
+	//    bool bExternalSymbol = (list->n_type & N_EXT) != 0;
+	//    uint8_t type         = (list->n_type & N_TYPE);
+	//
+	//    switch (type) {
+	//        case N_SECT: {
+	//            if (bPrivateSymbol) {
+	//                printf("Private External Symbol");
+	//            } else if (bExternalSymbol) {
+	//                printf("External Symbol");
+	//            } else {
+	//                printf("Non-external Symbol");
+	//            }
+	//            break;
+	//        }
+	//        default:
+	//            break;
+	//    }
+	//    printf("\n");
+}
 
-	switch (type) {
-		case N_SECT: {
-			if (bPrivateSymbol) {
-				printf("Private External Symbol");
-			} else if (bExternalSymbol) {
-				printf("External Symbol");
-			} else {
-				printf("Non-external Symbol");
-			}
-			break;
-		}
-		default:
-			break;
-	}
-	printf("\n");
+void dump_dwarf(FILE *obj_file, struct section *setion) {
+}
+
+void dump_dwarf_64(FILE *obj_file, struct section_64 *setion) {
 }
 
 void cxx_demangle(const char *mangleName, char **demangleName) {
