@@ -6,8 +6,6 @@
 //  Copyright © 2019 K&K. All rights reserved.
 //
 
-#include "mach-o.h"
-
 #include <fcntl.h>
 #include <malloc/_malloc.h>
 #include <string.h>
@@ -15,6 +13,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "Demangle_CPP.hpp"
+#include "mach-o.h"
 
 const struct _cpu_type_names cpu_type_names[] = {
     {CPU_TYPE_I386, "i386"},
@@ -441,7 +442,8 @@ void parse_lc_symtab_64(void *macho, struct symtab_command *command, struct Cont
 	list = NULL;
 }
 
-char *cplus_demangle(const char *mangleName) {
+char *cplus_demangle(const char *mangledSymbol) {
+	/*
 	char *cmd           = "c++filt -n ";
 	size_t len          = strlen(mangleName) + strlen(cmd);
 	char *commandString = (char *)calloc(len, 1);
@@ -452,7 +454,7 @@ char *cplus_demangle(const char *mangleName) {
 	if (fp) {
 		result = fgetln(fp, &len);
 		if (len > 0 && result[len - 1] == '\n') {
-            result[len - 1] = '\0';
+			result[len - 1] = '\0';
 		}
 		pclose(fp);
 		fp = NULL;
@@ -460,4 +462,6 @@ char *cplus_demangle(const char *mangleName) {
 	free(commandString);
 	commandString = NULL;
 	return result;
+     */
+	return demangleCPP(mangledSymbol);
 }

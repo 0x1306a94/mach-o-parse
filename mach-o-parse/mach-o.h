@@ -67,5 +67,5 @@ int process_lc_symtab(void *macho, struct Context *ctx);
 void parse_lc_symtab(void *macho, struct symtab_command *command, struct Context *ctx);
 void parse_lc_symtab_64(void *macho, struct symtab_command *command, struct Context *ctx);
 
-char *cplus_demangle(const char *mangleName);
+char *cplus_demangle(const char *mangledSymbol);
 #endif /* mach_o_h */
